@@ -1,31 +1,26 @@
 #!/bin/bash
 
-set -euo pipefail
-
-function installTravisTools {
-  mkdir ~/.local
-  curl -sSL https://github.com/SonarSource/travis-utils/tarball/v21 | tar zx --strip-components 1 -C ~/.local
-  source ~/.local/bin/install
-}
+set -eo pipefail
 
 case "$TEST" in
 
 ci)
-  mvn verify -B -e -V
+  mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent install sonar:sonar verify -B -e -V -Dskip.failsafe.tests
   ;;
 
 plugin)
-  installTravisTools
 
-  mvn package -T2 -Dsource.skip=true -Denforcer.skip=true -Danimal.sniffer.skip=true -Dmaven.test.skip=true
+  # Unset environment settings defined by Travis that will collide with our integration tests
+  unset SONARQUBE_SCANNER_PARAMS SONAR_TOKEN SONAR_SCANNER_HOME
 
-  if [ "$SQ_VERSION" = "DEV" ] ; then
-    build_snapshot "SonarSource/sonarqube"
-  fi
-
-  cd its/$TEST
-  mvn package -Dsonar.runtimeVersion="$SQ_VERSION" -DjavaVersion="LATEST_RELEASE" -Dmaven.test.redirectTestOutputToFile=false
+  # Run integration tests
+  mvn verify -Dtest.sonar.version=${SQ_VERSION} -Dtest.sonar.plugin.version.java=${SJ_VERSION} -Dskip.surefire.tests
   ;;
+
+javadoc)
+    # Create JavaDocs to check for problems with JavaDoc generation
+    mvn install javadoc:javadoc -DskipTests
+    ;;
 
 *)
   echo "Unexpected TEST mode: $TEST"
